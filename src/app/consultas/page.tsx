@@ -13,24 +13,47 @@ const CAT_COLORS: Record<string, string> = {
   extra: "#d4af6a",
 };
 
-/* ── SQL Syntax Highlighter ── */
+/* ── SQL Syntax Highlighter ──
+ *
+ * Se tokeniza en UNA sola pasada. La versión anterior aplicaba varios
+ * .replace() encadenados: el resaltado de números volvía a coincidir con los
+ * números dentro de las clases CSS ya inyectadas (text-brass-400, etc.) y
+ * rompía el HTML, por lo que el código CSS terminaba mostrándose mezclado con
+ * el SQL. Al recorrer el texto una vez, nunca se re-procesa el marcado.
+ */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function highlightSQL(sql: string) {
-  const keywords = /\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|INNER JOIN|RIGHT JOIN|ON|AND|OR|NOT|IN|AS|ORDER BY|GROUP BY|HAVING|LIMIT|BETWEEN|LIKE|DISTINCT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DROP|ALTER|IS|NULL|COUNT|SUM|AVG|MIN|MAX|ROUND|COALESCE|DATEDIFF|DEFAULT|DESC|ASC)\b/gi;
-  const tables = /\b(Cliente|Habitacion|Empleado|Reservacion|Pago|asignar)\b/g;
-  const strings = /('(?:[^'\\]|\\.)*')/g;
-  const numbers = /\b(\d+(?:\.\d+)?)\b/g;
+  // El orden de las alternativas importa: cadenas, palabras clave, tablas, números.
+  const token =
+    /('(?:[^'\\]|\\.)*')|\b(SELECT|FROM|WHERE|LEFT JOIN|INNER JOIN|RIGHT JOIN|JOIN|ON|AND|OR|NOT|IN|AS|ORDER BY|GROUP BY|HAVING|LIMIT|BETWEEN|LIKE|DISTINCT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DROP|ALTER|IS|NULL|COUNT|SUM|AVG|MIN|MAX|ROUND|COALESCE|DATEDIFF|DEFAULT|DESC|ASC)\b|\b(Cliente|Habitacion|Empleado|Reservacion|Pago|asignar)\b|\b(\d+(?:\.\d+)?)\b/gi;
 
-  let result = sql
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  let out = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
 
-  result = result.replace(strings, '<span class="text-emerald-400">$1</span>');
-  result = result.replace(keywords, '<span class="text-brass-400 font-semibold">$&</span>');
-  result = result.replace(tables, '<span class="text-blue-400">$1</span>');
-  result = result.replace(numbers, '<span class="text-amber-300">$1</span>');
+  while ((m = token.exec(sql)) !== null) {
+    // Texto plano previo al token.
+    out += escapeHtml(sql.slice(last, m.index));
 
-  return result;
+    if (m[1]) {
+      out += `<span class="text-emerald-400">${escapeHtml(m[1])}</span>`;
+    } else if (m[2]) {
+      out += `<span class="text-brass-400 font-semibold">${escapeHtml(m[2])}</span>`;
+    } else if (m[3]) {
+      out += `<span class="text-blue-400">${escapeHtml(m[3])}</span>`;
+    } else if (m[4]) {
+      out += `<span class="text-amber-300">${escapeHtml(m[4])}</span>`;
+    }
+
+    last = m.index + m[0].length;
+  }
+
+  // Resto del texto.
+  out += escapeHtml(sql.slice(last));
+  return out;
 }
 
 /* ── Result types ── */
@@ -90,11 +113,12 @@ export default function ConsultasPage() {
       return val.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     const str = String(val);
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      try {
-        return new Date(str).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" });
-      } catch {
-        return str;
+    const dm = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dm) {
+      // Construye la fecha en hora local para no restar un día por zona horaria.
+      const d = new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]));
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" });
       }
     }
     return str;

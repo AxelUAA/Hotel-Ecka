@@ -39,6 +39,23 @@ export type Resource = {
   allowUpdate: boolean;
   fields: Field[]; // campos editables
   listColumns: { name: string; label: string }[]; // columnas de la tabla
+
+  /**
+   * Construye la etiqueta legible que se muestra cuando este recurso se
+   * referencia como llave foranea (en los <select> y en las tablas).
+   * Por defecto se usa `labelColumn`. Recibe una fila del listado, por lo que
+   * puede combinar varias columnas (ej. numero + tipo, o #id + nombre cliente).
+   */
+  fkLabel?: (row: Record<string, unknown>) => string;
+
+  /**
+   * Cláusulas SQL OPCIONALES y de confianza (definidas solo aquí, nunca a
+   * partir de entrada del usuario) para enriquecer el listado con JOINs, por
+   * ejemplo para traer el nombre del cliente junto a una reservación.
+   */
+  listSelect?: string; // lista de columnas del SELECT (con alias de tabla)
+  listFrom?: string; // cláusula FROM + JOINs
+  listOrderBy?: string; // ORDER BY (con alias de tabla)
 };
 
 export const RESOURCES: Record<string, Resource> = {
@@ -78,6 +95,9 @@ export const RESOURCES: Record<string, Resource> = {
     pk: ["IdHabitacion"],
     autoId: true,
     labelColumn: "numero",
+    // En los <select> muestra "numero - tipo" para saber de que tipo es cada una.
+    fkLabel: (r) =>
+      r.tipo ? `${r.numero} - ${r.tipo}` : String(r.numero ?? r.IdHabitacion ?? ""),
     allowUpdate: true,
     fields: [
       { name: "numero", label: "Numero", type: "number", required: true },
@@ -142,6 +162,21 @@ export const RESOURCES: Record<string, Resource> = {
     pk: ["IdReservacion"],
     autoId: true,
     labelColumn: "IdReservacion",
+    // En los <select> y tablas muestra "Reserva #id - nombre del cliente".
+    fkLabel: (r) =>
+      r.cliente_nombre
+        ? `Reserva #${r.IdReservacion} - ${r.cliente_nombre}`
+        : `Reserva #${r.IdReservacion}`,
+    // El listado trae el nombre del cliente y del empleado mediante JOIN.
+    listSelect:
+      "r.IdReservacion, r.fecha_entrada, r.fecha_salida, r.estado, " +
+      "r.ClienteIdCliente, c.nombre AS cliente_nombre, " +
+      "r.EmpleadoIdEmpleado, e.nombre AS empleado_nombre",
+    listFrom:
+      "`Reservacion` r " +
+      "LEFT JOIN `Cliente` c ON c.IdCliente = r.ClienteIdCliente " +
+      "LEFT JOIN `Empleado` e ON e.IdEmpleado = r.EmpleadoIdEmpleado",
+    listOrderBy: "r.IdReservacion",
     allowUpdate: true,
     fields: [
       { name: "fecha_entrada", label: "Fecha de entrada", type: "date", required: true },
@@ -167,8 +202,8 @@ export const RESOURCES: Record<string, Resource> = {
       { name: "fecha_entrada", label: "Entrada" },
       { name: "fecha_salida", label: "Salida" },
       { name: "estado", label: "Estado" },
-      { name: "ClienteIdCliente", label: "Cliente" },
-      { name: "EmpleadoIdEmpleado", label: "Empleado" },
+      { name: "cliente_nombre", label: "Cliente" },
+      { name: "empleado_nombre", label: "Empleado" },
     ],
   },
 
@@ -182,6 +217,15 @@ export const RESOURCES: Record<string, Resource> = {
     pk: ["IdPago"],
     autoId: true,
     labelColumn: "IdPago",
+    // El listado trae el nombre del cliente vinculado a la reservación.
+    listSelect:
+      "p.IdPago, p.monto, p.metodo_pago, p.fecha_pago, " +
+      "p.ReservacionIdReservacion, c.nombre AS cliente_nombre",
+    listFrom:
+      "`Pago` p " +
+      "LEFT JOIN `Reservacion` r ON r.IdReservacion = p.ReservacionIdReservacion " +
+      "LEFT JOIN `Cliente` c ON c.IdCliente = r.ClienteIdCliente",
+    listOrderBy: "p.IdPago",
     allowUpdate: true,
     fields: [
       { name: "monto", label: "Monto", type: "decimal", required: true, help: "Debe ser >= 0" },
@@ -207,6 +251,7 @@ export const RESOURCES: Record<string, Resource> = {
       { name: "metodo_pago", label: "Metodo" },
       { name: "fecha_pago", label: "Fecha" },
       { name: "ReservacionIdReservacion", label: "Reservacion" },
+      { name: "cliente_nombre", label: "Cliente" },
     ],
   },
 
@@ -220,6 +265,17 @@ export const RESOURCES: Record<string, Resource> = {
     pk: ["HabitacionIdHabitacion", "ReservacionIdReservacion"],
     autoId: false,
     labelColumn: "HabitacionIdHabitacion",
+    // El listado trae numero/tipo de habitacion y el nombre del cliente.
+    // Se conservan las columnas de la PK compuesta para poder eliminar.
+    listSelect:
+      "a.HabitacionIdHabitacion, h.numero AS habitacion_numero, h.tipo AS habitacion_tipo, " +
+      "a.ReservacionIdReservacion, c.nombre AS cliente_nombre",
+    listFrom:
+      "`asignar` a " +
+      "LEFT JOIN `Habitacion` h ON h.IdHabitacion = a.HabitacionIdHabitacion " +
+      "LEFT JOIN `Reservacion` r ON r.IdReservacion = a.ReservacionIdReservacion " +
+      "LEFT JOIN `Cliente` c ON c.IdCliente = r.ClienteIdCliente",
+    listOrderBy: "a.HabitacionIdHabitacion, a.ReservacionIdReservacion",
     allowUpdate: false, // PK compuesta: solo alta y baja
     fields: [
       {
@@ -238,8 +294,10 @@ export const RESOURCES: Record<string, Resource> = {
       },
     ],
     listColumns: [
-      { name: "HabitacionIdHabitacion", label: "Habitacion" },
+      { name: "habitacion_numero", label: "Habitacion" },
+      { name: "habitacion_tipo", label: "Tipo" },
       { name: "ReservacionIdReservacion", label: "Reservacion" },
+      { name: "cliente_nombre", label: "Cliente" },
     ],
   },
 };

@@ -55,11 +55,19 @@ function missingRequired(resource: Resource, body: Record<string, unknown>): str
   return null;
 }
 
-/** Lista todos los registros de un recurso, ordenados por su PK. */
+/**
+ * Lista todos los registros de un recurso, ordenados por su PK.
+ *
+ * Si el recurso define `listSelect`/`listFrom` (cláusulas de confianza fijadas
+ * en schema.ts) se usan para enriquecer el listado con JOINs; de lo contrario
+ * se construye el SELECT por defecto a partir de `listColumns`.
+ */
 export async function listRows(resource: Resource): Promise<RowDataPacket[]> {
-  const orderBy = resource.pk.map((c) => `\`${c}\``).join(", ");
-  const cols = resource.listColumns.map((c) => `\`${c.name}\``).join(", ");
-  return query<RowDataPacket[]>(`SELECT ${cols} FROM \`${resource.table}\` ORDER BY ${orderBy}`);
+  const cols =
+    resource.listSelect ?? resource.listColumns.map((c) => `\`${c.name}\``).join(", ");
+  const from = resource.listFrom ?? `\`${resource.table}\``;
+  const orderBy = resource.listOrderBy ?? resource.pk.map((c) => `\`${c}\``).join(", ");
+  return query<RowDataPacket[]>(`SELECT ${cols} FROM ${from} ORDER BY ${orderBy}`);
 }
 
 /** Inserta un nuevo registro. */

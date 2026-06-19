@@ -1,30 +1,25 @@
--- Active: 1781560218544@@thomas.proxy.rlwy.net@51391@railway
 -- =====================================================================
---  HOTEL ECKA  -  BASE DE DATOS  (HotelDB)
---  Motor: MySQL / MariaDB (XAMPP)
+--  HOTEL ECKA - Setup para Railway
 --
---  Este archivo crea la estructura EXACTA del entregable (mismos nombres
---  de tablas, columnas, llaves y restricciones) y la puebla con datos de
---  ejemplo para que la aplicacion web arranque lista para usarse.
+--  Carga las 6 tablas + datos en la base que YA EXISTE en Railway
+--  (normalmente llamada "railway"). NO crea ni borra bases de datos,
+--  por lo que funciona aunque el usuario no tenga permiso de CREATE DATABASE.
 --
---  Como importar en XAMPP:
---    1. Inicia Apache y MySQL en el panel de XAMPP.
---    2. Abre http://localhost/phpmyadmin
---    3. Pestania "Importar" -> selecciona este archivo -> "Continuar".
---    (o por consola:  mysql -u root < HotelDB.sql )
+--  Como usarlo:
+--    1. En la conexion de Railway, pon el campo "Database" = railway
+--    2. Importa / ejecuta este archivo sobre esa conexion.
+--    3. En Vercel, DATABASE_URL debe terminar en  /railway
 -- =====================================================================
 
--- I. Crear y seleccionar la base de datos
-DROP DATABASE IF EXISTS HotelDB;
-CREATE DATABASE HotelDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE HotelDB;
+-- Borra las tablas en orden inverso a las llaves foraneas (si existian)
+DROP TABLE IF EXISTS asignar;
+DROP TABLE IF EXISTS Pago;
+DROP TABLE IF EXISTS Reservacion;
+DROP TABLE IF EXISTS Empleado;
+DROP TABLE IF EXISTS Habitacion;
+DROP TABLE IF EXISTS Cliente;
 
-
--- ============================================================
--- 1. ESTRUCTURA DEL MODELO RELACIONAL
--- ============================================================
-
--- II. Tabla Cliente
+-- ---------- Estructura ----------
 CREATE TABLE Cliente (
     IdCliente      TINYINT(3)   NOT NULL AUTO_INCREMENT,
     nombre         VARCHAR(100) NOT NULL,
@@ -34,7 +29,6 @@ CREATE TABLE Cliente (
     PRIMARY KEY (IdCliente)
 );
 
--- III. Tabla Habitacion
 CREATE TABLE Habitacion (
     IdHabitacion TINYINT(3)    NOT NULL AUTO_INCREMENT,
     numero       INT           NOT NULL,
@@ -46,7 +40,6 @@ CREATE TABLE Habitacion (
     CONSTRAINT chk_hab_estado CHECK (estado IN ('Disponible','Ocupada','Mantenimiento'))
 );
 
--- IV. Tabla Empleado
 CREATE TABLE Empleado (
     IdEmpleado TINYINT(3)   NOT NULL AUTO_INCREMENT,
     nombre     VARCHAR(100) NOT NULL,
@@ -56,7 +49,6 @@ CREATE TABLE Empleado (
     PRIMARY KEY (IdEmpleado)
 );
 
--- V. Tabla Reservacion
 CREATE TABLE Reservacion (
     IdReservacion      TINYINT(3)  NOT NULL AUTO_INCREMENT,
     fecha_entrada      DATE        NOT NULL,
@@ -73,7 +65,6 @@ CREATE TABLE Reservacion (
     CONSTRAINT chk_res_fechas CHECK (fecha_salida > fecha_entrada)
 );
 
--- VI. Tabla Pago
 CREATE TABLE Pago (
     IdPago                   TINYINT(3)    NOT NULL AUTO_INCREMENT,
     monto                    DECIMAL(10,2) NOT NULL,
@@ -87,7 +78,6 @@ CREATE TABLE Pago (
     CONSTRAINT chk_pago_metodo CHECK (metodo_pago IN ('Efectivo','Tarjeta','Transferencia'))
 );
 
--- VII. Tabla asignar (relacion N:M Habitacion - Reservacion)
 CREATE TABLE asignar (
     HabitacionIdHabitacion   TINYINT(3) NOT NULL,
     ReservacionIdReservacion TINYINT(3) NOT NULL,
@@ -98,11 +88,7 @@ CREATE TABLE asignar (
         ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-
--- ============================================================
--- 2. DATOS DE EJEMPLO (seed)
--- ============================================================
-
+-- ---------- Datos de ejemplo ----------
 INSERT INTO Cliente (nombre, correo, telefono, fecha_registro) VALUES
 ('Ana Martinez Torres', 'ana.martinez@correo.com', '4491234567', '2025-01-10'),
 ('Luis Hernandez Diaz', 'luis.hernandez@correo.com', '4497654321', '2025-02-15'),
@@ -141,12 +127,4 @@ INSERT INTO Pago (monto, metodo_pago, fecha_pago, ReservacionIdReservacion) VALU
 (1300.00, 'Tarjeta',       '2025-06-04', 4);
 
 INSERT INTO asignar (HabitacionIdHabitacion, ReservacionIdReservacion) VALUES
-(1, 1),
-(2, 1),
-(3, 2),
-(1, 3),
-(4, 4),
-(2, 5),
-(5, 6);
-
--- Fin del script.
+(1, 1), (2, 1), (3, 2), (1, 3), (4, 4), (2, 5), (5, 6);

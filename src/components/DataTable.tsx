@@ -46,17 +46,21 @@ function formatValue(col: string, val: unknown): React.ReactNode {
     );
   }
 
-  // Date formatting
-  if (col.includes("fecha") && /^\d{4}-\d{2}-\d{2}/.test(str)) {
-    try {
-      return new Date(str).toLocaleDateString("es-MX", {
+  // Date formatting.
+  // Se construye la fecha en hora LOCAL a partir de año/mes/día para evitar el
+  // desfase de un día: `new Date("2025-07-05")` se interpreta como UTC y, al
+  // mostrarla en una zona horaria negativa (ej. UTC-6), retrocedía al día 4.
+  const dm = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (col.includes("fecha") && dm) {
+    const d = new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]));
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("es-MX", {
         year: "numeric",
         month: "short",
         day: "numeric",
       });
-    } catch {
-      return str;
     }
+    return str;
   }
 
   // Decimal / money formatting

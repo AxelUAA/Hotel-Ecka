@@ -84,7 +84,11 @@ export default function CrudPage({ resourceKey }: CrudPageProps) {
           const json = await res.json();
           const options: FkOption[] = (json.data ?? []).map((r: Row) => ({
             value: r[fkRes.pk[0]] as number | string,
-            label: String(r[fkRes.labelColumn] ?? r[fkRes.pk[0]] ?? ''),
+            // Usa la etiqueta enriquecida del recurso (ej. "101 - Doble" o
+            // "Reserva #3 - Ana Martinez") si esta definida; si no, la columna base.
+            label: fkRes.fkLabel
+              ? fkRes.fkLabel(r)
+              : String(r[fkRes.labelColumn] ?? r[fkRes.pk[0]] ?? ''),
           }));
           return [field.name, options] as const;
         } catch {
@@ -129,11 +133,13 @@ export default function CrudPage({ resourceKey }: CrudPageProps) {
     const data: Row = {};
     resource.fields.forEach((f: Field) => {
       const val = row[f.name];
-      // Format dates to YYYY-MM-DD for <input type="date">
+      // Format dates to YYYY-MM-DD for <input type="date">.
+      // Se extrae la parte de fecha del texto SIN convertir zonas horarias,
+      // para que no se corra un día (ej. 2025-07-05 -> mostraba 2025-07-04).
       if (f.type === 'date' && val) {
-        const d = new Date(val as string);
-        if (!isNaN(d.getTime())) {
-          data[f.name] = d.toISOString().split('T')[0];
+        const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+          data[f.name] = `${m[1]}-${m[2]}-${m[3]}`;
           return;
         }
       }
