@@ -58,9 +58,9 @@ function missingRequired(resource: Resource, body: Record<string, unknown>): str
 /**
  * Lista todos los registros de un recurso, ordenados por su PK.
  *
- * Si el recurso define `listSelect`/`listFrom` (cláusulas de confianza fijadas
- * en schema.ts) se usan para enriquecer el listado con JOINs; de lo contrario
- * se construye el SELECT por defecto a partir de `listColumns`.
+ * Si el recurso define listSelect/listFrom (clausulas de confianza fijadas en
+ * schema.ts) se usan para enriquecer el listado con JOINs; de lo contrario se
+ * construye el SELECT por defecto a partir de listColumns.
  */
 export async function listRows(resource: Resource): Promise<RowDataPacket[]> {
   const cols =
@@ -68,6 +68,43 @@ export async function listRows(resource: Resource): Promise<RowDataPacket[]> {
   const from = resource.listFrom ?? `\`${resource.table}\``;
   const orderBy = resource.listOrderBy ?? resource.pk.map((c) => `\`${c}\``).join(", ");
   return query<RowDataPacket[]>(`SELECT ${cols} FROM ${from} ORDER BY ${orderBy}`);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Efectos sobre el estado de la Habitacion al (des)asignar            */
+/* ------------------------------------------------------------------ */
+/**
+ * Al asignar una habitacion a una reservacion, la habitacion pasa a 'Ocupada'.
+ * No se modifican las habitaciones en 'Mantenimiento'.
+ */
+async function marcarHabitacionOcupada(roomId: unknown): Promise<void> {
+  const id = Number(roomId);
+  if (Number.isNaN(id)) return;
+  await execute(
+    "UPDATE `Habitacion` SET estado = 'Ocupada' WHERE IdHabitacion = ? AND estado <> 'Mantenimiento'",
+    [id]
+  );
+}
+
+/**
+ * Al quitar una asignacion, si la habitacion ya no tiene ninguna otra
+ * asignacion se libera (vuelve a 'Disponible'). No se tocan las habitaciones
+ * en 'Mantenimiento'.
+ */
+async function liberarHabitacionSiLibre(roomId: unknown): Promise<void> {
+  const id = Number(roomId);
+  if (Number.isNaN(id)) return;
+  const rows = await query<RowDataPacket[]>(
+    "SELECT COUNT(*) AS n FROM `asignar` WHERE HabitacionIdHabitacion = ?",
+    [id]
+  );
+  const restantes = Number(rows[0]?.n ?? 0);
+  if (restantes === 0) {
+    await execute(
+      "UPDATE `Habitacion` SET estado = 'Disponible' WHERE IdHabitacion = ? AND estado <> 'Mantenimiento'",
+      [id]
+    );
+  }
 }
 
 /** Inserta un nuevo registro. */
@@ -88,6 +125,10 @@ export async function createRow(
       `INSERT INTO \`${resource.table}\` (${cols}) VALUES (${placeholders})`,
       values
     );
+    // Al asignar una habitacion, marcarla como Ocupada.
+    if (resource.key === "asignaciones") {
+      await marcarHabitacionOcupada(body["HabitacionIdHabitacion"]);
+    }
     return { insertId: result.insertId };
   } catch (err) {
     return { error: describeDbError(err) };
@@ -140,6 +181,10 @@ export async function deleteRow(
       `DELETE FROM \`${resource.table}\` WHERE ${whereClause}`,
       whereValues
     );
+    // Al quitar una asignacion, liberar la habitacion si ya no tiene asignaciones.
+    if (resource.key === "asignaciones") {
+      await liberarHabitacionSiLibre(pkValues["HabitacionIdHabitacion"]);
+    }
     return { affectedRows: result.affectedRows };
   } catch (err) {
     return { error: describeDbError(err) };
